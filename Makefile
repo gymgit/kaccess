@@ -4,7 +4,7 @@ KERNEL_DIR=$(HOME)/ubuntu-xenial
 #ARCHI=arm64
 
 obj-m+=kaccess.o
-kaccess-objs := src/kamem.o src/kaccess.o
+kaccess-objs := src/kamem.o src/kaccess.o src/kacmd.o
 ccflags-y=-I$(PWD)/include
 
 all:

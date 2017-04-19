@@ -17,4 +17,5 @@ extern long (*vwrite_p)(char*, char*, unsigned long);
 // static int mmap_kmem(struct file *file, struct vm_area_struct *vma);
 
 extern const struct file_operations kmem_fops;
+extern const struct file_operations mem_fops;
 #endif

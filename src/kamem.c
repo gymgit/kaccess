@@ -18,6 +18,7 @@
 #include <linux/uio.h>
 
 #include <linux/uaccess.h>
+#include <asm/io.h> //for debug purposes
 #include "kaccess.h"
 //#include "kamem.h"
 long (*vread_p)(char *, char*, unsigned long)=NULL;
@@ -173,6 +174,160 @@ static int mmap_kmem(struct file *file, struct vm_area_struct *vma)
 	return mmap_mem(file, vma);
 }
 
+void *xlate_dev_mem_ptr(phys_addr_t phys)
+{
+    unsigned long start  = phys &  PAGE_MASK;
+    unsigned long offset = phys & ~PAGE_MASK;
+    void *vaddr;
+
+    /* If page is RAM, we can use __va. Otherwise ioremap and unmap. */
+    if (page_is_ram(start >> PAGE_SHIFT))
+            return __va(phys);
+
+    vaddr = ioremap_cache(start, PAGE_SIZE);
+    /* Only add the offset on success and return NULL if the ioremap() failed: */
+    if (vaddr)
+            vaddr += offset;
+
+    return vaddr;
+}
+
+void unxlate_dev_mem_ptr(phys_addr_t phys, void *addr)
+{
+    if (page_is_ram(phys >> PAGE_SHIFT))
+            return;
+
+    iounmap((void __iomem *)((unsigned long)addr & PAGE_MASK));
+}
+
+static ssize_t read_mem(struct file *file, char __user *buf,
+                        size_t count, loff_t *ppos)
+{
+    phys_addr_t p = *ppos;
+    ssize_t read, sz;
+    void *ptr;
+
+    printk(KERN_INFO "[ka_mem] Reading physical memory\n");
+    if (p != *ppos)
+            return 0;
+
+    if (!valid_phys_addr_range(p, count))
+            return -EFAULT;
+    read = 0;
+#ifdef __ARCH_HAS_NO_PAGE_ZERO_MAPPED
+    /* we don't have page 0 mapped on sparc and m68k.. */
+    if (p < PAGE_SIZE) {
+            sz = size_inside_page(p, count);
+            if (sz > 0) {
+                    if (clear_user(buf, sz))
+                            return -EFAULT;
+                    buf += sz;
+                    p += sz;
+                    count -= sz;
+                    read += sz;
+            }
+    }
+#endif
+
+    while (count > 0) {
+            unsigned long remaining;
+
+            sz = size_inside_page(p, count);
+
+            if (!range_is_allowed(p >> PAGE_SHIFT, count))
+                    return -EPERM;
+
+            /*
+             * On ia64 if a page has been mapped somewhere as uncached, then
+             * it must also be accessed uncached by the kernel or data
+             * corruption may occur.
+             */
+            ptr = xlate_dev_mem_ptr(p);
+            if (!ptr)
+                    return -EFAULT;
+
+            remaining = copy_to_user(buf, ptr, sz);
+            //printk(KERN_INFO "[ka_mem] sending data to user: %c\n", ptr[0]);
+            unxlate_dev_mem_ptr(p, ptr);
+            if (remaining)
+                    return -EFAULT;
+
+            buf += sz;
+            p += sz;
+            count -= sz;
+            read += sz;
+    }
+
+    *ppos += read;
+    return read;
+}
+
+static ssize_t write_mem(struct file *file, const char __user *buf,
+                     size_t count, loff_t *ppos)
+{
+    phys_addr_t p = *ppos;
+    ssize_t written, sz;
+    unsigned long copied;
+    void *ptr;
+
+    printk(KERN_INFO "[ka_mem] Trying to write to physical memory at %llx\n",*ppos);
+    if (p != *ppos)
+            return -EFBIG;
+
+    if (!valid_phys_addr_range(p, count))
+            return -EFAULT;
+
+    written = 0;
+
+#ifdef __ARCH_HAS_NO_PAGE_ZERO_MAPPED
+    /* we don't have page 0 mapped on sparc and m68k.. */
+    if (p < PAGE_SIZE) {
+            sz = size_inside_page(p, count);
+            /* Hmm. Do something? */
+            buf += sz;
+            p += sz;
+            count -= sz;
+            written += sz;
+    }
+#endif
+
+    while (count > 0) {
+            sz = size_inside_page(p, count);
+
+            if (!range_is_allowed(p >> PAGE_SHIFT, sz))
+                    return -EPERM;
+
+            /*
+             * On ia64 if a page has been mapped somewhere as uncached, then
+             * it must also be accessed uncached by the kernel or data
+             * corruption may occur.
+             */
+            ptr = xlate_dev_mem_ptr(p);
+            if (!ptr) {
+                    if (written)
+                            break;
+                    return -EFAULT;
+            }
+
+            copied = copy_from_user(ptr, buf, sz);
+            //printk(KERN_INFO "[ka_mem] Writing to kernel %c %c %c %c\n", ptr[0], ptr[1], ptr[2], ptr[3]);
+            unxlate_dev_mem_ptr(p, ptr);
+            if (copied) {
+                    written += sz - copied;
+                    if (written)
+                            break;
+                    return -EFAULT;
+            }
+
+            buf += sz;
+            p += sz;
+            count -= sz;
+            written += sz;
+    }
+
+    *ppos += written;
+    return written;
+}
 /*
  * This function reads the *virtual* memory as seen by the kernel.
  */
@@ -185,7 +340,7 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 	int err = 0;
 
 	read = 0;
-    printk(KERN_INFO "[mykmem] Reading kernel memory\n");
+    printk(KERN_INFO "[ka_kmem] Reading kernel memory\n");
 	if (p < (unsigned long) high_memory) {
 		low_count = count;
 		if (count > (unsigned long)high_memory - p)
@@ -214,7 +369,7 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			 */
 			kbuf = xlate_dev_kmem_ptr((char *)p);
 
-            printk(KERN_INFO "[mykmem] sending data to user: %c\n", kbuf[0]);
+            printk(KERN_INFO "[ka_kmem] sending data to user: %c\n", kbuf[0]);
 			if (copy_to_user(buf, kbuf, sz))
 				return -EFAULT;
 			buf += sz;
@@ -232,11 +387,11 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 		while (count > 0) {
 			sz = size_inside_page(p, count);
 			sz = vread_p(kbuf, (char *)p, sz);
-            printk(KERN_INFO "[mykmem] reading %lu bytes\n", sz);
+            printk(KERN_INFO "[ka_kmem] reading %lu bytes\n", sz);
 			if (!sz)
 				break;
 
-            printk(KERN_INFO "[mykmem] sending data to user: %c\n", kbuf[0]);
+            printk(KERN_INFO "[ka_kmem] sending data to user: %c\n", kbuf[0]);
 			if (copy_to_user(buf, kbuf, sz)) {
 				err = -EFAULT;
 				break;
@@ -249,7 +404,6 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 		free_page((unsigned long)kbuf);
 	}
 	*ppos = p;
-    printk(KERN_INFO "[mykmem] read success!\n");
 	return read ? read : err;
 }
 
@@ -260,7 +414,7 @@ static ssize_t do_write_kmem(unsigned long p, const char __user *buf,
 	ssize_t written, sz;
 	unsigned long copied;
 
-    printk(KERN_INFO "[mykmem] Mykmem do write\n");
+    printk(KERN_INFO "[ka_kmem] Mykmem do write\n");
 	written = 0;
 #ifdef __ARCH_HAS_NO_PAGE_ZERO_MAPPED
 	/* we don't have page 0 mapped on sparc and m68k.. */
@@ -315,7 +469,7 @@ static ssize_t write_kmem(struct file *file, const char __user *buf,
 	char *kbuf; /* k-addr because vwrite() takes vmlist_lock rwlock */
 	int err = 0;
 
-    printk(KERN_INFO "[mykmem] Trying to write to kernel at %llx\n",*ppos);
+    printk(KERN_INFO "[ka_kmem] Trying to write to kernel at %llx\n",*ppos);
 	if (p < (unsigned long) high_memory) {
 		unsigned long to_write = min_t(unsigned long, count,
 					       (unsigned long)high_memory - p);
@@ -336,7 +490,7 @@ static ssize_t write_kmem(struct file *file, const char __user *buf,
 			unsigned long n;
 
 			n = copy_from_user(kbuf, buf, sz);
-            printk(KERN_INFO "[mykmem] Writing to kernel %c %c %c %c\n", kbuf[0], kbuf[1], kbuf[2], kbuf[3]);
+            printk(KERN_INFO "[ka_kmem] Writing to kernel %c %c %c %c\n", kbuf[0], kbuf[1], kbuf[2], kbuf[3]);
 			if (n) {
 				err = -EFAULT;
 				break;
@@ -367,8 +521,8 @@ static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 {
 	loff_t ret;
 
-    printk(KERN_INFO "[mykmem] lseeking to %llx\n", offset);
-    printk(KERN_INFO "[mykmem] physical  %llx\n", virt_to_phys(offset));
+    printk(KERN_INFO "[ka_kmem] lseeking to %llx\n", offset);
+    printk(KERN_INFO "[ka_kmem] physical  %llx\n", virt_to_phys((void*)offset));
 	mutex_lock(&file_inode(file)->i_mutex);
 	switch (orig) {
 	case SEEK_CUR:
@@ -377,7 +531,7 @@ static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 		/* to avoid userland mistaking f_pos=-9 as -EBADF=-9 */
 		if ((unsigned long long)offset >= ~0xFFFULL) {
 			ret = -EOVERFLOW;
-            printk(KERN_INFO "[mykmem] Overflow in lseek\n");
+            printk(KERN_INFO "[ka_kmem] Overflow in lseek\n");
 			break;
 		}
 		file->f_pos = offset;
@@ -388,19 +542,41 @@ static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 		ret = -EINVAL;
 	}
 	mutex_unlock(&file_inode(file)->i_mutex);
-    printk(KERN_INFO "[mykmem] seeked ret: %llx\n", ret);
+    printk(KERN_INFO "[ka_kmem] seeked ret: %llx\n", ret);
 	return ret;
 }
 
 static int open_kmem(struct inode *inode, struct file *filp)
 {
-    printk(KERN_INFO "[mykmem] kmem opened: %d\n", capable(CAP_SYS_RAWIO) ? 0 : -EPERM);
-    printk(KERN_INFO "[mykmem] high mem: %lx\n", (unsigned long)high_memory);
-    printk(KERN_INFO "[mykmem] file mode: %x\n", filp->f_mode);
-    printk(KERN_INFO "[mykmem] playground at: %llx\n", (unsigned long long)playground);
-    filp->f_mode |= FMODE_UNSIGNED_OFFSET;
-	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
+    printk(KERN_INFO "[ka_kmem] kmem opened: %d\n", capable(CAP_SYS_RAWIO) ? 0 : -EPERM);
+    printk(KERN_INFO "[ka_kmem] high mem: %lx\n", (unsigned long)high_memory);
+    printk(KERN_INFO "[ka_kmem] file mode: %x\n", filp->f_mode);
+    printk(KERN_INFO "[ka_kmem] playground at: %llx\n", (unsigned long long)playground);
+    
+    // we might aswell allow anyone to open?
+    return 0;
+	//return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
+
+static int open_mem(struct inode *inode, struct file *filp)
+{
+    printk(KERN_INFO "[ka_mem] mem opened: %d\n", capable(CAP_SYS_RAWIO) ? 0 : -EPERM);
+    printk(KERN_INFO "[ka_mem] high mem: %lx\n", (unsigned long)high_memory);
+    printk(KERN_INFO "[ka_mem] file mode: %x\n", filp->f_mode);
+    printk(KERN_INFO "[ka_mem] playground at: %llx\n", (unsigned long long)virt_to_phys((void*)playground));
+
+    // we might aswell allow anyone to open?
+    return 0;
+    //return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
+}
+
+const struct file_operations mem_fops = {
+    .llseek         = memory_lseek,
+    .read           = read_mem,
+    .write          = write_mem,
+    .mmap           = mmap_mem,
+    .open           = open_mem,
+};
 
 const struct file_operations kmem_fops = {
 	.llseek		= memory_lseek,
