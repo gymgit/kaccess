@@ -119,8 +119,9 @@ static int __init chr_dev_init(void)
     int ret, minor;
 	printk(KERN_INFO "[kaccess] MyKmem is loading\n");
     ret = kallsyms_on_each_symbol(symwalk_cb, NULL);
-    if (ret)
+    if (ret){
         return ret;
+    }
     
 	majorNum = register_chrdev(0, DEVICE_NAME, &memory_fops);
 	if (majorNum < 0){

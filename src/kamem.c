@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/uio.h>
 
+#include <linux/version.h>
 #include <linux/uaccess.h>
 #include <asm/io.h> //for debug purposes
 #include "kaccess.h"
@@ -335,7 +336,7 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	unsigned long p = *ppos;
-	ssize_t low_count, read, sz;
+    ssize_t low_count, read, sz;
 	char *kbuf; /* k-addr because vread() takes vmlist_lock rwlock */
 	int err = 0;
 
@@ -523,7 +524,11 @@ static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 
     printk(KERN_INFO "[ka_kmem] lseeking to %llx\n", offset);
     printk(KERN_INFO "[ka_kmem] physical  %llx\n", virt_to_phys((void*)offset));
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,7,0)
 	mutex_lock(&file_inode(file)->i_mutex);
+#else
+    inode_lock(file_inode(file));   
+#endif
 	switch (orig) {
 	case SEEK_CUR:
 		offset += file->f_pos;
@@ -541,7 +546,11 @@ static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 	default:
 		ret = -EINVAL;
 	}
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,7,0)
 	mutex_unlock(&file_inode(file)->i_mutex);
+#else
+    inode_unlock(file_inode(file));   
+#endif
     printk(KERN_INFO "[ka_kmem] seeked ret: %llx\n", ret);
 	return ret;
 }
