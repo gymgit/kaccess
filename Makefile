@@ -1,4 +1,5 @@
-KERNEL_DIR=$(HOME)/ubuntu-zesty
+#KERNEL_DIR=$(HOME)/ubuntu-zesty
+KERNEL_DIR=../kernels/ubuntu-zesty
 #TOOLCHAIN=toolchain5.0.2/bin/arm-linux-androideabi-
 #TOOLCHAIN=android-ndk-r12b/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-
 #ARCHI=arm64
