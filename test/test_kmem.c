@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include "../include/kacmd.h"
+#include "kacmd.h"
 
 #define VREAD 0xffffffff811cff10
 //#define VREAD 0xffffffffc00e730f
@@ -91,10 +91,10 @@ int main(int argc, char** argv)
     puts(reada);
     write_dev(vmem, "TEST123", 7, (unsigned long long)(kir.pg_vaddress));
     printf("[I] Written vaddr: %p\n", kir.pg_vaddress);
-    /* read_dev(pmem, reada, 45, (unsigned long long)(kir.pg_paddress)); */
-    /* reada[44] = 0; */
-    /* printf("[I] Dump paddr: %p\n", kir.pg_paddress); */
-    /* puts(reada); */
+    read_dev(vmem, reada, 45, (unsigned long long)(kir.pg_vaddress));
+    reada[44] = 0;
+    printf("[I] Dump paddr: %p\n", kir.pg_paddress);
+    puts(reada);
 
     tmp = 0xc3;
     write_dev(vmem, &tmp, 1, (unsigned long long)(kir.exec_paddress));
@@ -105,49 +105,6 @@ int main(int argc, char** argv)
     kcp.address = (void(*)())kir.exec_paddress;
     // call the page (should just return)
     write_dev(cmd, (char*)&kcp, sizeof(kcp), 0);
-    while (1){
-        tmp++;
-    }
-
-    /* printf("RW to address: %llx\n", address); */
-    /* lseek64(fp, address, SEEK_CUR); */
-    /* //_llseek(fp, address>>32, address & 0xffffffff, &result, SEEK_SET); */
-    /* read(fp, reada, sizeof(reada)); */
-    /* printf("Kernel Dump:\n"); */
-    /* puts(reada); */
-    /* lseek64(fp, address, SEEK_SET); */
-    /* //_llseek(fp, address>>32, address & 0xffffffff, &result, SEEK_SET); */
-    /* write(fp, data, strlen(data)); */
-    /* lseek64(fp, address, SEEK_SET); */
-    /* //_llseek(fp, address>>32, address & 0xffffffff, &result, SEEK_SET); */
-    /* //read(fp, dump, sizeof(dump)); */
-    /* read(fp, reada, sizeof(reada)); */
-    /* printf("Kernel Dump:\n"); */
-    /* puts(reada); */
-    /*  */
-    /* fp = open("/dev/ka_mem", O_RDWR|O_LARGEFILE); */
-    /* address -= 0xffffffff80000000; */
-    /* printf("RW to phys address: %llx\n", address); */
-    /* lseek64(fp, address, SEEK_CUR); */
-    /* //_llseek(fp, address>>32, address & 0xffffffff, &result, SEEK_SET); */
-    /* read(fp, reada, sizeof(reada)); */
-    /* printf("Kernel Dump:\n"); */
-    /* puts(reada); */
-    /* lseek64(fp, address, SEEK_SET); */
-    /* //_llseek(fp, address>>32, address & 0xffffffff, &result, SEEK_SET); */
-    /* write(fp, data, strlen(data)); */
-    /* lseek64(fp, address, SEEK_SET); */
-    /* //_llseek(fp, address>>32, address & 0xffffffff, &result, SEEK_SET); */
-    /* //read(fp, dump, sizeof(dump)); */
-    /* read(fp, reada, sizeof(reada)); */
-    /* printf("Kernel Dump:\n"); */
-    /* puts(reada); */
-    /*  */
-    /* return 0; */
-    /* for (int i =0; i < 4; i++) */
-    /* { */
-    /*     printf("\t0x%lx\n", dump[i]); */
-    /* } */
     return 0;
 
 }
