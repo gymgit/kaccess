@@ -8,7 +8,7 @@ KACCESS_DIR=$(PWD)
 
 obj-m+=kaccess.o
 kaccess-objs := src/kamem.o src/kaccess.o src/kacmd.o
-ccflags-y=-I$(PWD)/include
+ccflags-y=-I$(PWD)/include -g -DDEBUG
 
 all: module test
 

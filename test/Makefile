@@ -6,8 +6,8 @@ ifeq ($(KACCESS_DIR),)
 endif
 IDIR=$(KACCESS_DIR)/include
 CFLAGS=-std=c11 -fPIC -static -I$(IDIR)
-__DEPS=kacmd.h
-DEPS=$(patsubst %,$(IDIR)/%,$(_OBJ))
+_DEPS=kacmd.h
+DEPS=$(patsubst %,$(IDIR)/%,$(_DEPS))
 
 test:  test_kmem.c $(DEPS)
 	$(CC) -o $@.elf $(CFLAGS) $<

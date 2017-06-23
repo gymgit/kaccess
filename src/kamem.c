@@ -387,13 +387,17 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			return -ENOMEM;
 		while (count > 0) {
 			sz = size_inside_page(p, count);
-			sz = vread_p(kbuf, (char *)p, sz);
+            // we dont want to only be able to read vmalloc area
+            // but rather the entire virtual address space
+			//sz = vread_p(kbuf, (char *)p, sz);
+            // we simply read from the virtual address
+            // NOTE this is unsafe, but hey we are here for the crashes
             printk(KERN_INFO "[ka_kmem] reading %lu bytes\n", sz);
 			if (!sz)
 				break;
 
             printk(KERN_INFO "[ka_kmem] sending data to user: %c\n", kbuf[0]);
-			if (copy_to_user(buf, kbuf, sz)) {
+			if (copy_to_user(buf, (char*)p, sz)) {
 				err = -EFAULT;
 				break;
 			}

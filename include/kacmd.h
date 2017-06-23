@@ -11,6 +11,8 @@ struct cmd_result {
     size_t size;
     char* resptr;
 };
+
+#define MAX_SYM_SIZE 256
 #endif
 
 // Define commands
@@ -26,8 +28,10 @@ struct cmd_result {
 // TODO kmalloc allocations
 // kfree
 // change page protection flags
-// get kernel syms
+// get kernel syms - userdefined
+// buffer overflow
 // get Kacces info - exec page location...
+// spin/mutex unlocks
 
 #pragma pack(push, 1)
 // Command structures
@@ -64,6 +68,9 @@ struct kacmd_info_resp{
     void* pg_vaddress;
     void* pg_paddress;
     void* exec_paddress;
+    void* kernel_code;
+    void* kernel_data;
+    void* kernel_bss;
 };
 
 #pragma pack(pop)

@@ -84,6 +84,7 @@ int main(int argc, char** argv)
     write_dev(cmd, (char*)&kip, sizeof(kip), 0);
     read_dev(cmd, (char*)&kir, sizeof(kir), 0);
     printf("[I] Vpg: %p Ppg: %p Epg: %p\n", kir.pg_vaddress, kir.pg_paddress, kir.exec_paddress);
+    printf("[I] code: %p data: %p bss: %p\n", kir.kernel_code, kir.kernel_data, kir.kernel_bss);
 
     read_dev(vmem, reada, 45, (unsigned long long)(kir.pg_vaddress));
     reada[44] = 0;

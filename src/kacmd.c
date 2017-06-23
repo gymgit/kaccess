@@ -5,12 +5,57 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/kallsyms.h>
 #include "kacmd.h"
 #include "kaccess.h"
 
 //extern char* playground;
 //extern char* execplay;
+static unsigned long startup_64;
+static unsigned long init_thread_union_addr;
+static unsigned long dummy_mapping;
 
+static int findsym_cb(void *data, const char *name, struct module *mod, unsigned long addr)
+{
+    if (mod != NULL)
+        return 0;
+
+    if (strcmp(name, "startup_64") == 0)
+    {
+        printk(KERN_INFO "[kacmd] found startup_64 at %lx \n", addr);
+        startup_64 = addr;
+        return 0;
+    }
+    
+    if (strcmp(name, "init_thread_union") == 0)
+    {
+        printk(KERN_INFO "[kacmd] found init_thread_union at %lx \n", addr);
+        init_thread_union_addr = addr;
+        return 0;
+    }
+
+    if (strcmp(name, "dummy_mapping") == 0)
+    {
+        printk(KERN_INFO "[kacmd] found dummy_mapping at %lx \n", addr);
+        dummy_mapping = addr;
+        return 0;
+    }
+    return 0;
+}
+
+static char sym_name[MAX_SYM_SIZE];
+
+static int usersym_cb(void *data, const char *name, struct module *mod, unsigned long addr)
+{
+    if (strcmp(name, sym_name) == 0)
+    {
+        printk(KERN_INFO "[kacmd] found %s at %lx \n", sym_name, addr);
+        dummy_mapping = addr;
+        return 0;
+    }
+    return 0;
+
+}
 static ssize_t read_res(struct file *filp, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
@@ -138,6 +183,9 @@ static ssize_t write_cmd(struct file *filp, const char __user *buf,
             kir->pg_vaddress = playground;
             kir->pg_paddress = virt_to_phys(playground);
             kir->exec_paddress = execplay;
+            kir->kernel_code = (void *) startup_64;
+            kir->kernel_data = (void *) init_thread_union_addr;
+            kir->kernel_bss = (void *) (dummy_mapping - 0x1000);
             cr->ready = 1;
             break;
         }
@@ -163,6 +211,7 @@ static int open_cmd(struct inode *inode, struct file *filp)
     }
     memset(filp->private_data, 0, sizeof(struct cmd_result));
 
+    kallsyms_on_each_symbol(findsym_cb, NULL);
     return 0;
 }
 
