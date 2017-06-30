@@ -25,6 +25,8 @@ struct cmd_result {
 #define KACMD_KFREE 0x05
 
 #define KACMD_INFO 0x06
+
+#define KACMD_STACK_BOF 0x07
 // TODO kmalloc allocations
 // kfree
 // change page protection flags
@@ -58,6 +60,13 @@ struct kacmd_kfree_params{
 struct kacmd_info_params{
     unsigned char cmd;
 };
+
+struct kacmd_sbof_params{
+    unsigned char cmd;
+    unsigned int size;
+    char data[];
+};
+
 // Response structures
 struct kacmd_kmalloc_resp{
     unsigned char size;

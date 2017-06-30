@@ -122,7 +122,7 @@ static ssize_t write_cmd(struct file *filp, const char __user *buf,
         goto error_out;
     }
 
-    printk(KERN_INFO "[ka_cmd] Invoking CMD %c\n", ud[0]);
+    printk(KERN_INFO "[ka_cmd] Invoking CMD %d\n", ud[0]);
     switch(ud[0]){
         case KACMD_JUMP_TO:
         {
@@ -189,8 +189,17 @@ static ssize_t write_cmd(struct file *filp, const char __user *buf,
             cr->ready = 1;
             break;
         }
+        case KACMD_STACK_BOF:
+        {
+            struct kacmd_sbof_params *ksp = (struct kacmd_sbof_params *)ud;
+            char buff[32];
+            printk(KERN_INFO "[ka_cmd] Copy %u bytes to: %p\n", ksp->size, buff);
+            memcpy(buff, ksp->data, ksp->size);
+            //return count
+            break;
+        }
         default:
-            printk(KERN_INFO "[ka_cmd] Unknown CMD %c\n", buf[0]);
+            printk(KERN_INFO "[ka_cmd] Unknown CMD %d\n", buf[0]);
             break;
     }
 
