@@ -14,6 +14,7 @@
 static unsigned long startup_64;
 static unsigned long init_thread_union_addr;
 static unsigned long dummy_mapping;
+static unsigned long (*read_cr4)(void);
 
 static int findsym_cb(void *data, const char *name, struct module *mod, unsigned long addr)
 {
@@ -38,6 +39,12 @@ static int findsym_cb(void *data, const char *name, struct module *mod, unsigned
     {
         printk(KERN_INFO "[kacmd] found dummy_mapping at %lx \n", addr);
         dummy_mapping = addr;
+        return 0;
+    }
+    if (strcmp(name, "native_read_cr4") == 0)
+    {
+        printk(KERN_INFO "[kacmd] found native_read_cr4 at %lx \n", addr);
+        read_cr4 = (void*)addr;
         return 0;
     }
     return 0;
@@ -127,21 +134,32 @@ static ssize_t write_cmd(struct file *filp, const char __user *buf,
         case KACMD_JUMP_TO:
         {
             struct kacmd_jump_params *kjp = (struct kacmd_jump_params*)ud;
-            printk(KERN_INFO "[ka_cmd] Jumping to %llx\n", (unsigned long long) kjp->address);
+            printk(KERN_INFO "[ka_cmd] Jumping to %lx\n", (unsigned long) kjp->address);
             goto *kjp->address;
             break;
         }
         case KACMD_CALL_SIMPLE:
         {
             struct kacmd_call_params *kcp = (struct kacmd_call_params*)ud;
-            printk(KERN_INFO "[ka_cmd] Calling %llx\n", (unsigned long long) kcp->address);
+            printk(KERN_INFO "[ka_cmd] Calling %lx\n", (unsigned long) kcp->address);
             kcp->address();
             break;
         }
         case KACMD_CALL_COMPLEX:
         {
             //struct kacmd_call_params *kcp = (struct kacmd_call_params*)ud;
-            printk(KERN_INFO "[ka_cmd] Not Implemented\n");
+            struct kacmd_call_params *kcp = (struct kacmd_call_params*)ud;
+            printk(KERN_INFO "[ka_cmd] Calling %lx\n", (unsigned long) kcp->address);
+            printk(KERN_INFO "[ka_cmd] RDI: %lx, RSI: %lx, RDX: %lx, R10: %lx\n",
+                    kcp->rdi,
+                    kcp->rsi,
+                    kcp->rdx,
+                    kcp->r10);
+            ((void (*)(unsigned long, unsigned long, unsigned long, unsigned long))kcp->address)(
+                kcp->rdi,
+                kcp->rsi,
+                kcp->rdx,
+                kcp->r10);
             break;
         }
         case KACMD_KMALLOC:
@@ -186,6 +204,7 @@ static ssize_t write_cmd(struct file *filp, const char __user *buf,
             kir->kernel_code = (void *) startup_64;
             kir->kernel_data = (void *) init_thread_union_addr;
             kir->kernel_bss = (void *) (dummy_mapping - 0x1000);
+            kir->cr4 = read_cr4();
             cr->ready = 1;
             break;
         }

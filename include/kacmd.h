@@ -44,6 +44,11 @@ struct kacmd_jump_params{
 struct kacmd_call_params{
     unsigned char cmd;
     void (*address)(void);
+    unsigned long rdi;
+    unsigned long rsi;
+    unsigned long rdx;
+    unsigned long r10;
+
 };
 
 struct kacmd_kmalloc_params{
@@ -80,6 +85,7 @@ struct kacmd_info_resp{
     void* kernel_code;
     void* kernel_data;
     void* kernel_bss;
+    unsigned long cr4;
 };
 
 #pragma pack(pop)
